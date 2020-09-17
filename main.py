@@ -11,11 +11,11 @@ Created on Thu Sep  3 14:49:20 2020
 # These chunks were shuffled, resulting in 11500 samples.
 #
 # 
-# 5 - eyes open, means when they were recording the EEG signal of the brain the patient had their eyes open
-# 4 - eyes closed, means when they were recording the EEG signal the patient had their eyes closed
-# 3 - Yes they identify where the region of the tumor was in the brain and recording the EEG activity from the healthy brain area
-# 2 - They recorder the EEG from the area where the tumor was located
-# 1 - Recording of seizure activity
+# 5 - (healthy, surface recording) eyes open, means when they were recording the EEG signal of the brain the patient had their eyes open
+# 4 - (healthy, surface recording) eyes closed, means when they were recording the EEG signal the patient had their eyes closed
+# 3 - (epiliptic, intracranial recording) The EEG activity from the hippocampal formation in the non-epiletogenic hemisphere with no seizure
+# 2 - (healthy, surface recording) The EEG activity from the epileptogenic zone brain area with no seizure
+# 1 - (healthy, surface recording) Recording of seizure activity
 
 import os
 import numpy as np
@@ -23,6 +23,7 @@ import pandas as pd
 
 from sklearn import preprocessing as pp
 from sklearn.covariance import EllipticEnvelope as mcd
+from sklearn.decomposition import PCA
 
 from matplotlib import pyplot as plt
 
@@ -35,10 +36,44 @@ x = pd.read_csv("Data/data.csv", sep = ";")
 # Count number of missing values
 nullsum = np.sum(np.sum(x.isnull()))
 
-# Set all alternative classes to class zero
-# 0 = no seizure -- 1 = seizure
-x['y'].loc[x['y'] != 1] = 0
 
+# %% Data Cleaning
+
+# Set variable names colummn as index
+x.set_index('Unnamed: 0', inplace = True)
+
+# == Missing Data ==
+# Remove all samples with any missing data
+x.dropna(inplace = True)
+
+# == Noise Removal ==
+
+
+# == Outlier Detection ==
+cov = mcd(support_fraction = 0.6, random_state = 0).fit(x)
+outliers = cov.predict(x)
+num_outliers = np.unique(outliers, return_counts=True)
+
+# %% PCA
+scaled_x = pp.scale(x.iloc[:,0:-1])
+
+pca = PCA()
+pca.fit(scaled_x)
+pca_x = pca.transform(scaled_x)
+
+plt.figure()
+colors = ['navy', 'turquoise', 'darkorange']
+lw = 2
+
+plt.scatter(pca_x[:,0], pca_x[:,1])
+
+
+# %% Data  Transformation
+# Data Normilisation
+y = pp.normalize(x)
+
+
+# %% Visualisation
 # Let's inspect the distribution of the data
 plt.hist(x['X1'], bins = 200, histtype = 'barstacked')
 plt.show()
@@ -66,23 +101,3 @@ plt.show()
 plt.figure(dpi = 300)
 plt.plot(x.iloc[105,1:-1], marker ='x', markersize=3)
 plt.show()
-
-# %% Data Cleaning
-
-# Set variable names colummn as index
-x.set_index('Unnamed: 0', inplace = True)
-
-# == Missing Data ==
-# Remove all samples with any missing data
-x.dropna(inplace = True)
-
-# == Noise Removal ==
-
-
-# == Outlier Detection ==
-cov = mcd(support_fraction = 0.6, random_state = 0).fit(x)
-outliers = cov.predict(x)
-num_outliers = np.unique(outliers, return_counts=True)
-# %% Data  Transformation
-# Data Normilisation
-y = pp.normalize(x)
