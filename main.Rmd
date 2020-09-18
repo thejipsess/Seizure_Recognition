@@ -16,8 +16,8 @@ These chunks were shuffled, resulting in 11500 samples.
 5 - (healthy, surface recording) eyes open, means when they were recording the EEG signal of the brain the patient had their eyes open
 4 - (healthy, surface recording) eyes closed, means when they were recording the EEG signal the patient had their eyes closed
 3 - (epiliptic, intracranial recording) The EEG activity from the hippocampal formation in the non-epiletogenic hemisphere with no seizure
-2 - (healthy, surface recording) The EEG activity from the epileptogenic zone brain area with no seizure
-1 - (healthy, surface recording) Recording of seizure activity
+2 - (epiliptic, intracranial recording) The EEG activity from the epileptogenic zone brain area with no seizure
+1 - (epiliptic, intracranial recording) Recording of seizure activity
 
 
 
@@ -61,7 +61,7 @@ ggplot(x_t, aes(x=time, y=x_t[,col]))+
 
 ```{r PCA}
 # Perform PCA
-pca <- prcomp(x, scale=TRUE)
+pca <- prcomp(x, center = TRUE, scale=FALSE)
 
 pca.var <- pca$sdev^2
 pca.var.per <- round(pca.var/sum(pca.var)*100, 1)
@@ -94,7 +94,7 @@ ggplot(long, aes (value)) +
 # Normalise: mean-center
 # Scale: Unit variance scaling
 preproc <- preProcess(x, method=c('center', 'scale'))
-preproc <- preProcess(x, method=c('center'))
+#preproc <- preProcess(x, method=c('center'))
 x <- predict(preproc, x)
 
 long_norm = melt(x, id.vars = 0)
@@ -124,14 +124,19 @@ ggplot(long, aes(x = variable, y = value))+
   geom_boxplot()+
   ggtitle("Boxplot of entire dat set")
 
+# Get rid of the most extreme outlier
+row_max <- which(x == max(x), arr.ind = TRUE)[1]
+y <- y[-row_max]
+x <- x[-row_max,]
+
 
 # Remove univariate outliers
 for(i in seq(1, 178)){
   Q1 <- quantile(x[,i], 0.25)
   Q3 <- quantile(x[,i], 0.75)
   IQR <- Q3 - Q1
-  uplim <- Q3 + 1.5*IQR
-  downlim <- Q1 - 1.5*IQR
+  uplim <- Q3 + 10*IQR
+  downlim <- Q1 - 10*IQR
   
   y <- y[x[names(x)[i]] <= uplim & x[names(x)[i]] >= downlim]
   x <- x[x[names(x)[i]] <= uplim & x[names(x)[i]] >= downlim,]
@@ -173,15 +178,14 @@ ggplot(res, aes(x = y, y = value, group = y))+
 ggplot(res, aes(x = y, y = value, group=y))+
   geom_boxplot()+
   ggtitle("boxplot of the different classes")+
-  xlim(1, 6)
+  scale_x_discrete(name ="Class", 
+                    limits=factor(c(1, 2, 3, 4, 5)))
+  
 
 ggplot(long, aes(x = variable, y = value))+
   geom_boxplot()+
-  ggtitle("Boxplot of entire dat set")
-
-ggplot(long, aes(x = variable, y = value))+
-  geom_boxplot()+
-  ggtitle("Boxplot of entire dat  - normalised again")
+  ggtitle("Boxplot of entire dat set") +
+  theme(axis.text.x = element_blank(), axis.ticks = element_blank())
 ```
 
 
@@ -194,10 +198,12 @@ ggplot(long, aes(x = variable, y = value))+
 ```
 
 ```{r test}
+library(stringr)
+f <- data.frame(str_split_fixed(row.names(x), "[.]", 3))
+f[,1:2] <- substring(f[,1:2],2)
+colnames(f) <- c('Person', )
 
-
-
-
+# To do: create proper splits of the three sample id's (the columns) and make sure that column three get completely filled, for some their value ended up in column 2.
 
 ```
 
