@@ -197,13 +197,24 @@ ggplot(long, aes(x = variable, y = value))+
 
 ```
 
-```{r test}
+```{r autoCorrelation}
+# This section splits the sample information into three different columns
+# This is to get info on which samples belong to which individual
+# There should be 500 individuals, they have not yet been identified
 library(stringr)
-f <- data.frame(str_split_fixed(row.names(x), "[.]", 3))
-f[,1:2] <- substring(f[,1:2],2)
-colnames(f) <- c('Person', )
+# Split sample index into three columns
+samples <- data.frame(str_split_fixed(row.names(x), "[.]", 3))
+# Remove letters from sample IDs
+samples[,1] <- substring(samples[,1],2)
+samples[,2] <- substring(samples[,2],2)
+# Take info of second column into third column when missing
+missing_index <- samples[,3] == ""
+samples[missing_index, 3] <-substr(samples[missing_index, 2], 2, 2)
+samples[missing_index, 2] <-substr(samples[missing_index, 2], 1, 1)
+samples <- sapply(samples, as.integer)
+# Set column names
+colnames(samples) <- c('Chunk', 'V', 'unknown')
 
-# To do: create proper splits of the three sample id's (the columns) and make sure that column three get completely filled, for some their value ended up in column 2.
 
 ```
 
