@@ -26,7 +26,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-
+This section loads all the the required packages and the data. Also, it removes missing data and splits the data into dependant and independant data.
 ```{r data, echo=FALSE}
 source('packages.R')
 
@@ -190,10 +190,33 @@ ggplot(long, aes(x = variable, y = value))+
 
 
 
-``` {r NoiseRemoval}
+``` {r distance, message=FALSE}
+z <- x
+z$y <- y
+z <- z[y == 1 | y == 2,]
+z <- arrange(z, y)
 
+distance <- dist(z[,-y])
+distance <- as.matrix(distance)
+heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y)
 
+# Perform PCA
+pca <- prcomp(z[,-y], center = TRUE, scale=FALSE)
 
+pca.var <- pca$sdev^2
+pca.var.per <- round(pca.var/sum(pca.var)*100, 1)
+barplot(pca.var.per, main="PCA plot", xlab="Principal component", ylab='Percent variation')
+
+pca.data <- data.frame(Sample=z$y, X = pca$x[,1], Y = pca$x[,2])
+
+PCA_euc <- ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, color = factor(Sample))) +
+                  geom_point(alpha = 0.5) +
+                  xlab(paste("PC1 - ", pca.var.per[1], "%", sep="")) +
+                  ylab(paste("PC2 - ", pca.var.per[2], "%", sep="")) +
+                  theme_bw() +
+                  ggtitle("PCA plot - Euclidean distance")
+PCA_euc
+ggsave("Figures/PCA Euclidean distance.png", plot = PCA_euc, device = 'png', dpi=1200)
 
 ```
 
