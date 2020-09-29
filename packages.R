@@ -13,6 +13,10 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 if (!requireNamespace("pcaMethods", quietly = TRUE))
   BiocManager::install("pcaMethods")
 
+# Data Mining and Analysis of Lipidomics Datasets (used for is probabilistic quotient normalisation)
+if (!requireNamespace("lipidr", quietly = TRUE))
+  BiocManager::install("lipidr")
+
 if (!requireNamespace("knitr", quietly = TRUE))
   install.packages("knitr")
 
@@ -31,12 +35,16 @@ if (!requireNamespace("reshape", quietly = TRUE))
 if (!requireNamespace("tidyverse", quietly = TRUE))
   install.packages("tidyverse")
 
+if (!requireNamespace("pca3d", quietly = TRUE))
+  install.packages("pca3d")
+
 
 #=========================================#
 ##              Load packages            ##
 #=========================================#
 
 library(ggplot2)
+library(pca3d)
 
 library(reshape)
 library(rstudioapi)
@@ -44,3 +52,4 @@ library(tidyverse)
 
 # Normalisation
 library(caret)
+library(lipidr)

@@ -76,6 +76,8 @@ ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, color = factor(Sample))) +
   theme_bw() +
   ggtitle("PCA plot")
 
+
+
 # Remove the sample with class 70
 x <- x[y != 70,]
 y <- y[y != 70]
@@ -142,6 +144,10 @@ for(i in seq(1, 178)){
   x <- x[x[names(x)[i]] <= uplim & x[names(x)[i]] >= downlim,]
 }
 
+# Min Max normalisation
+for (col in colnames(x)){
+  x[col] <- ((x[col] - min(x[col])) / (max(x[col]) - min(x[col])))
+}
 
 # Repteated plots!!!!!!
 long = melt(x, id.vars = 0)
@@ -151,7 +157,8 @@ ggplot(long, aes (value)) +
   geom_density() +
   ggtitle("Data distribution (unnormalised)")
 
-# Normalise: mean-center
+# Transformation:
+# mean-center: Set mean of each variable to 0
 # Scale: Unit variance scaling
 preproc <- preProcess(x, method=c('center', 'scale'))
 preproc <- preProcess(x, method=c('center'))
@@ -191,14 +198,36 @@ ggplot(long, aes(x = variable, y = value))+
 
 
 ``` {r distance, message=FALSE}
+# create matrix z which contains both x and y, only for classes one and two
 z <- x
 z$y <- y
 z <- z[y == 1 | y == 2,]
 z <- arrange(z, y)
 
+# Calculate the distance matrix (euclidean distance)
 distance <- dist(z[,-y])
 distance <- as.matrix(distance)
-heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y)
+
+# Plot heatmap of the distance matrix
+hm <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - no scaling")
+png(file="Figures/Heatmap.png", antialias = "cleartype", width = 6, height = 6, units = 'in', res = 600)
+hm <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - no scaling")
+dev.off()
+
+# Perform double centring on the distance matrix
+Rmean <- distance*0 + rowMeans(distance)
+Cmean <- distance*0 + colMeans(distance)
+distance = distance - Rmean - Cmean + mean(distance)
+
+# Plot heatmap of the distance matrix
+hm_dc <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - Double centred")
+png(file="Figures/Heatmap_dc.png", antialias = "cleartype", width = 6, height = 6, units = 'in', res = 600)
+hm_dc <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - Double centred")
+dev.off()
+
+# Plot heatmaps in console
+
+
 
 # Perform PCA
 pca <- prcomp(z[,-y], center = TRUE, scale=FALSE)
@@ -217,6 +246,11 @@ PCA_euc <- ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, color = factor(
                   ggtitle("PCA plot - Euclidean distance")
 PCA_euc
 ggsave("Figures/PCA Euclidean distance.png", plot = PCA_euc, device = 'png', dpi=1200)
+
+
+# 3D PCA
+pca3d(pca, group=pca.data$Sample, components = 1:3)
+#pca3d(pca, group=pca.data$Sample, components = 4:7)
 
 ```
 
