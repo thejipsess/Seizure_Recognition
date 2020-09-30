@@ -5,6 +5,13 @@
 # Update all packages
 #update.packages()
 
+# Install backports and devtools, and load devtools such that github packages can be installed
+if (!requireNamespace("backports", quietly = TRUE))
+  install.packages("backports")
+if (!requireNamespace("devtools", quietly = TRUE))
+  install.packages("devtools")
+library(devtools)
+
 # BiocManager
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
@@ -38,12 +45,16 @@ if (!requireNamespace("tidyverse", quietly = TRUE))
 if (!requireNamespace("pca3d", quietly = TRUE))
   install.packages("pca3d")
 
+if (!requireNamespace("ggbiplot", quietly = TRUE))
+  install_github("vqv/ggbiplot")
+
 
 #=========================================#
 ##              Load packages            ##
 #=========================================#
 
 library(ggplot2)
+library(ggbiplot)
 library(pca3d)
 
 library(reshape)
@@ -53,3 +64,9 @@ library(tidyverse)
 # Normalisation
 library(caret)
 library(lipidr)
+
+
+#=========================================#
+##             Load local files          ##
+#=========================================#
+source("plotter.R")
