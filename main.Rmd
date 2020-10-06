@@ -36,8 +36,10 @@ x = read.csv('Data/data.csv', sep = ';', row.names = 'X')
 x <- na.omit(x)
 
 # Permute y to create random data
-set.seed(4685)
-x$y <- sample(x$y)
+permute <- FALSE
+if(permute){
+  set.seed(4685)
+  x$y <- sample(x$y)}
   
 # Isolate y
 y <- x$y
@@ -177,43 +179,97 @@ plot_pca(pca_dist, y = z$y, title = "on euclidean distance", save=TRUE, include_
 rbfkernel <- rbfdot(sigma = 0.1)
 
 f <- kernelMatrix(rbfkernel, as.matrix(z))
+f <- kernelMatrix(rbfkernel, as.matrix(subset(z, select = -y)))
 
 pca <- prcomp(f, center = TRUE, scale=FALSE)
 
 plot_pca(pca, y = z$y, title = "kernel", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
 
-pca_dist <- prcomp(distance, center = TRUE, scale=FALSE)
-
 ```
 
 
 ```{r SVM}
+# Set seed to ensure reproducibility
 set.seed(4685)
-data_split <- initial_split(z, strata = "y", p = 0.9)
 
+# Split data in training and test set
+data_split <- initial_split(z, strata = "y", p = 0.9)
 z_train <- training(data_split)
 z_test <- testing(data_split)
 
-svm <- svm_rbf(mode = "classification", cost = 1, rbf_sigma = 0.1)
-svm
+# Remove y from the training and test set
+z_train_y <- z_train$y
+z_test_y <- z_test$y
+z_train <- subset(z_train, select = -y)
+z_test <- subset(z_test, select = -y)
 
+# Create svm model
+svm <- svm_rbf(mode = "classification", cost = 5.004239542, rbf_sigma = 0.03505893)
+
+# Fit the SVM model on t he training data
 svm_fit <- 
   svm %>%
   set_engine("kernlab") %>%
   fit_xy(
-    x = z[,-ncol(z)],
-    y = factor(z$y)
+    x = z_train,
+    y = factor(z_train_y)
   )
-svm_fit
 
+# Evaluate the SVM model on the test data
 test_results <- 
-  z_test %>%
-  select(y) %>%
+  z_test_y %>%
   bind_cols(
-    predict(svm_fit, new_data = z_test[,-ncol(z)])
-  )
+    predict(svm_fit, new_data = z_test)) %>%
+  setNames(c('True class', 'Predicted class'))
+  
 
-caret::confusionMatrix(factor(test_results[['.pred_class']]), factor(test_results[['y']]))
+# Compute the confusion matrix and evaluate the SVM performance
+caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_results[['True class']]))
 
 ```
 
+```{r gridsearch}
+# Change y into factor
+z$y <- factor(z$y)
+
+# Split data in training and test set
+data_split <- initial_split(z, strata = "y", p = 0.9)
+z_train <- training(data_split)
+z_test <- testing(data_split)
+
+
+# Create SVM model with hyperparameter tuning capabilities
+svm <-
+  svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+# Setup bootstrapping resample data z_rs
+z_rs <- bootstraps(z_train, times = 30)
+
+SVM_recipe <-
+  recipe(y ~ ., data = z_train) # %>%
+  # remove any zero variance predictors
+  #step_zv(all_predictors()) %>% 
+  # remove any linear combinations
+  #step_lincomb(all_numeric())
+
+ctrl <- control_grid(verbose = FALSE)
+
+roc_vals <- metric_set(accuracy)
+
+recipe_res <-
+  svm %>% 
+  tune_grid(
+    SVM_recipe,
+    resamples = z_rs,
+    metrics = roc_vals,
+    control = ctrl
+  )
+
+recipe_res
+
+show_best(recipe_res, metric = "accuracy")
+
+
+```
