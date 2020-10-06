@@ -27,15 +27,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 This section loads all the the required packages and the data. Also, it removes missing data and splits the data into dependant and independant data.
-```{r data, echo=FALSE}
+```{r data, echo=FALSE, message = FALSE}
 source('packages.R')
 
 # Load data
 x = read.csv('Data/data.csv', sep = ';', row.names = 'X')
 # Remove rows with missing data
 x <- na.omit(x)
+
+# Permute y to create random data
+set.seed(4685)
+x$y <- sample(x$y)
+  
 # Isolate y
 y <- x$y
+
 # remove y column from x
 x <- subset(x, select = -y)
 
@@ -59,7 +65,7 @@ plot_rand_sample(x)
 pca <- prcomp(x, center = TRUE, scale=FALSE)
 
 # Plot PCA
-plot_pca(pca)
+plot_pca(pca, y)
 
 # Remove the sample with class 70
 x <- x[y != 70,]
@@ -67,7 +73,7 @@ y <- y[y != 70]
 
 ```
 
-```{r Plot_data}
+```{r Plot_data_before}
 # Create density plot of unnormalised data
 plot_dens(x, "Data distribution (not pre-processed)")
 
@@ -105,7 +111,7 @@ for(i in seq(1, 178)){
 
 # mean-center: Set mean of each variable to 0
 # Scale: Unit variance scaling
-preproc <- preProcess(x, method=c('center', 'scale'))
+preproc <- preProcess(x, method=c('center')) # Can also add 'scale'
 x <- predict(preproc, x)
 
 # Min Max normalisation
@@ -116,7 +122,7 @@ for (col in colnames(x)){
 ```
 
 
-```{r Plot_data}
+```{r Plot_data_after}
 # Create density plot of unnormalised data
 plot_dens(x, "Data distribution (pre-processed)")
 
@@ -136,74 +142,78 @@ z <- z[y == 1 | y == 2,]
 z <- arrange(z, y)
 
 # Calculate the distance matrix (euclidean distance)
-distance <- dist(z[,-y])
+distance <- dist(z[,-ncol(z)])
 distance <- as.matrix(distance)
 
 # Plot heatmap of the distance matrix
-hm <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - no scaling")
-png(file="Figures/Heatmap.png", antialias = "cleartype", width = 6, height = 6, units = 'in', res = 600)
-hm <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - no scaling")
-dev.off()
+plot_heatmap(distance, save = TRUE, title = "Distance heatmap - no scaling")
 
 # Perform double centring on the distance matrix
 Rmean <- distance*0 + rowMeans(distance)
 Cmean <- distance*0 + colMeans(distance)
 distance = distance - Rmean - Cmean + mean(distance)
 
-# Plot heatmap of the distance matrix
-hm_dc <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - Double centred")
-png(file="Figures/Heatmap_dc.png", antialias = "cleartype", width = 6, height = 6, units = 'in', res = 600)
-hm_dc <- heatmap(distance, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = "Distance heatmap - Double centred")
-dev.off()
+# Plot heatmap of the double centered distance matrix
+plot_heatmap(distance, save = TRUE, title = "Distance heatmap - double centered")
 
-# Plot heatmaps in console
+# Perform PCA on normal data for class 1 & 2
+pca <- prcomp(z[,-ncol(z)], center = TRUE, scale=FALSE)
 
+# Plot PCA plots including 3D score plot
+plot_pca(pca, y = z$y, title = "on class 1 & 2", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
 
+# Perform PCA on euclidean distance for class 1 & 2
+pca_dist <- prcomp(distance, center = TRUE, scale=FALSE)
 
-# Perform PCA
-pca <- prcomp(z[,-y], center = TRUE, scale=FALSE)
+# Open new RGL device to allow both 3D plots to be active simultaneously
+open3d()
 
-pca.var <- pca$sdev^2
-pca.var.per <- round(pca.var/sum(pca.var)*100, 1)
-barplot(pca.var.per, main="PCA plot", xlab="Principal component", ylab='Percent variation')
+# Plot PCA plots including 3D score plot
+plot_pca(pca_dist, y = z$y, title = "on euclidean distance", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
+```
 
-pca.data <- data.frame(Sample=z$y, X = pca$x[,1], Y = pca$x[,2])
+```{r gaussian_kernel}
 
-PCA_euc <- ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, color = factor(Sample))) +
-                  geom_point(alpha = 0.5) +
-                  xlab(paste("PC1 - ", pca.var.per[1], "%", sep="")) +
-                  ylab(paste("PC2 - ", pca.var.per[2], "%", sep="")) +
-                  theme_bw() +
-                  coord_fixed(1) +
-                  ggtitle("PCA plot - Euclidean distance")
-PCA_euc
-ggsave("Figures/PCA Euclidean distance.png", plot = PCA_euc, device = 'png', dpi=1200)
+rbfkernel <- rbfdot(sigma = 0.1)
 
+f <- kernelMatrix(rbfkernel, as.matrix(z))
 
-# 3D PCA
-pca3d(pca, group=pca.data$Sample, components = 1:3)
-#pca3d(pca, group=pca.data$Sample, components = 4:7)
+pca <- prcomp(f, center = TRUE, scale=FALSE)
+
+plot_pca(pca, y = z$y, title = "kernel", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
+
+pca_dist <- prcomp(distance, center = TRUE, scale=FALSE)
 
 ```
 
-```{r autoCorrelation}
-# This section splits the sample information into three different columns
-# This is to get info on which samples belong to which individual
-# There should be 500 individuals, they have not yet been identified
-library(stringr)
-# Split sample index into three columns
-samples <- data.frame(str_split_fixed(row.names(x), "[.]", 3))
-# Remove letters from sample IDs
-samples[,1] <- substring(samples[,1],2)
-samples[,2] <- substring(samples[,2],2)
-# Take info of second column into third column when missing
-missing_index <- samples[,3] == ""
-samples[missing_index, 3] <-substr(samples[missing_index, 2], 2, 2)
-samples[missing_index, 2] <-substr(samples[missing_index, 2], 1, 1)
-samples <- sapply(samples, as.integer)
-# Set column names
-colnames(samples) <- c('Chunk', 'V', 'unknown')
 
+```{r SVM}
+set.seed(4685)
+data_split <- initial_split(z, strata = "y", p = 0.9)
+
+z_train <- training(data_split)
+z_test <- testing(data_split)
+
+svm <- svm_rbf(mode = "classification", cost = 1, rbf_sigma = 0.1)
+svm
+
+svm_fit <- 
+  svm %>%
+  set_engine("kernlab") %>%
+  fit_xy(
+    x = z[,-ncol(z)],
+    y = factor(z$y)
+  )
+svm_fit
+
+test_results <- 
+  z_test %>%
+  select(y) %>%
+  bind_cols(
+    predict(svm_fit, new_data = z_test[,-ncol(z)])
+  )
+
+caret::confusionMatrix(factor(test_results[['.pred_class']]), factor(test_results[['y']]))
 
 ```
 
