@@ -31,7 +31,7 @@ if (!requireNamespace("ggplot2", quietly = TRUE))
   install.packages("ggplot2")
 
 if (!requireNamespace("caret", quietly = TRUE))
-  install.packages("caret")
+  install.packages("caret", dependencies = TRUE)
 
 if (!requireNamespace("extrafont", quietly = TRUE))
   install.packages("extrafont")
@@ -42,11 +42,23 @@ if (!requireNamespace("reshape", quietly = TRUE))
 if (!requireNamespace("tidyverse", quietly = TRUE))
   install.packages("tidyverse")
 
+if (!requireNamespace("rgl", quietly = TRUE))
+  install.packages("rgl")
+
 if (!requireNamespace("pca3d", quietly = TRUE))
   install.packages("pca3d")
 
 if (!requireNamespace("ggbiplot", quietly = TRUE))
   install_github("vqv/ggbiplot")
+
+if (!requireNamespace("kernlab", quietly = TRUE))
+  install.packages("kernlab")
+
+if (!requireNamespace("tidymodels", quietly = TRUE))
+  install.packages("tidymodels")
+
+if (!requireNamespace("modelr", quietly = TRUE))
+  install.packages("modelr")
 
 
 #=========================================#
@@ -55,11 +67,15 @@ if (!requireNamespace("ggbiplot", quietly = TRUE))
 
 library(ggplot2)
 library(ggbiplot)
+library(rgl)
 library(pca3d)
 
+library(modelr)
 library(reshape)
 library(rstudioapi)
 library(tidyverse)
+library(tidymodels)
+library(kernlab)
 
 # Normalisation
 library(caret)

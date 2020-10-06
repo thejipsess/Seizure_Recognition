@@ -1,29 +1,37 @@
-plot_pca <- function(pca, type = 'regular', PC_x = 1, PC_y = 2){
+plot_pca <- function(pca, y, type = 'regular', PC_x = 1, PC_y = 2, PC_z=3, title = "PCA score plot", save=FALSE, include_3D = FALSE){
   # This function take the pca variable generetad by prcomp() and visualises it.
   # By default it plots a histogram of the variance percentage of the PCs
   # Also, it plots a PCA plot of the two specified PCs.
   
-  if (type == 'distance'){
-    
-  }
+  
   
   # Compute the variance (percentage) of the PCs
   pca.var <- pca$sdev^2
   pca.var.per <- round(pca.var/sum(pca.var)*100, 1)
   
   # Plot histograms of the PCs and their variance percentage
-  barplot(pca.var.per, main="PCA plot", xlab="Principal component", ylab='Percent variation')
+  barplot(pca.var.per, main=paste("PCA barplot", title), xlab="Principal component", ylab='Percent variation')
   
   # Extrapolate the PCs of interest
   pca.data <- data.frame(Sample=y, X = pca$x[,PC_x], Y = pca$x[,PC_y])
   
   # Plot the PCs of interest
-  ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, color = factor(Sample))) +
-    geom_point() +
-    xlab(paste(colnames(pca$x)[PC_x], " - ", pca.var.per[PC_x], "%", sep="")) +
-    ylab(paste(colnames(pca$x)[PC_y], " - ", pca.var.per[PC_y], "%", sep="")) +
-    theme_bw() +
-    ggtitle("PCA plot")
+  PCA_score_plot <- ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, color = factor(Sample))) +
+                            geom_point() +
+                            xlab(paste(colnames(pca$x)[PC_x], " - ", pca.var.per[PC_x], "%", sep="")) +
+                            ylab(paste(colnames(pca$x)[PC_y], " - ", pca.var.per[PC_y], "%", sep="")) +
+                            theme_bw() +
+                            coord_fixed(1) +
+                            ggtitle(paste("PCA score plot", title))
+  
+  print(PCA_score_plot)
+  
+  if(save)
+    ggsave(paste("Figures/PCA_score_plot_", title, ".png"), plot = PCA_score_plot, device = 'png', dpi=1200)
+  
+  if (include_3D){
+    pca3d(pca, group=pca.data$Sample, components = c(PC_x, PC_y, PC_z))
+  }
   
 }
 
@@ -91,25 +99,17 @@ plot_boxplot <- function(x, y=NULL, type = "all"){
 }
 
 
-calc_dist <- function(x){
+plot_heatmap <- function(x, title = "Heatmap", save = FALSE){
+  # PLots a heatmap op matrix x, can also locally save the figure.
   
-}
-
-
-test <- function(x){
-  time = seq(1, 178)
-  x_t <- data.frame(t(x))
-  x_t$time = time
-  col = floor(runif(1, min=1, max = 179))
+  # Generate heatmap
+  hm <- heatmap(x, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = title)
   
-  plt1 <- ggplot(x_t, aes(x=time, y=x_t[,col]))+
-    geom_line(colour = 'dodgerblue', size = 1)
+  if(save){
+    # save heatmap
+    png(file = paste("Figures/", title, ".png"), antialias = "cleartype", width = 6, height = 6, units = 'in', res = 600)
+    hm <- heatmap(x, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = title)
+    dev.off()
+  }
   
-  col = floor(runif(1, min=1, max = 179))
-  
-  plt2 <- ggplot(x_t, aes(x=time, y=x_t[,col]))+
-    geom_line(colour = 'dodgerblue', size = 1)
-
-  print(plt1)
-  print(plt2)
 }
