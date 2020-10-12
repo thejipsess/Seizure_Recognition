@@ -8,9 +8,9 @@
 # Install backports and devtools, and load devtools such that github packages can be installed
 if (!requireNamespace("backports", quietly = TRUE))
   install.packages("backports")
-if (!requireNamespace("devtools", quietly = TRUE))
-  install.packages("devtools")
-library(devtools)
+#if (!requireNamespace("devtools", quietly = TRUE))
+#  install.packages("devtools", dependencies = TRUE)
+#library(devtools)
 
 # BiocManager
 if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -19,10 +19,6 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 # Principal Component Analysis
 if (!requireNamespace("pcaMethods", quietly = TRUE))
   BiocManager::install("pcaMethods")
-
-# Data Mining and Analysis of Lipidomics Datasets (used for is probabilistic quotient normalisation)
-if (!requireNamespace("lipidr", quietly = TRUE))
-  BiocManager::install("lipidr")
 
 if (!requireNamespace("knitr", quietly = TRUE))
   install.packages("knitr")
@@ -39,6 +35,9 @@ if (!requireNamespace("extrafont", quietly = TRUE))
 if (!requireNamespace("reshape", quietly = TRUE))
   install.packages("reshape")
 
+if (!requireNamespace("dplyr", quietly = TRUE))
+  install.packages("dplyr")
+
 if (!requireNamespace("tidyverse", quietly = TRUE))
   install.packages("tidyverse")
 
@@ -48,8 +47,8 @@ if (!requireNamespace("rgl", quietly = TRUE))
 if (!requireNamespace("pca3d", quietly = TRUE))
   install.packages("pca3d")
 
-if (!requireNamespace("ggbiplot", quietly = TRUE))
-  install_github("vqv/ggbiplot")
+#if (!requireNamespace("ggbiplot", quietly = TRUE))
+#  install_github("vqv/ggbiplot")
 
 if (!requireNamespace("kernlab", quietly = TRUE))
   install.packages("kernlab")
@@ -60,13 +59,16 @@ if (!requireNamespace("tidymodels", quietly = TRUE))
 if (!requireNamespace("modelr", quietly = TRUE))
   install.packages("modelr")
 
+if (!requireNamespace("doParallel", quietly = TRUE))
+  install.packages("doParallel")
+
 
 #=========================================#
 ##              Load packages            ##
 #=========================================#
 
 library(ggplot2)
-library(ggbiplot)
+#library(ggbiplot)
 library(rgl)
 library(pca3d)
 
@@ -76,11 +78,10 @@ library(rstudioapi)
 library(tidyverse)
 library(tidymodels)
 library(kernlab)
+library(doParallel)
 
 # Normalisation
 library(caret)
-library(lipidr)
-
 
 #=========================================#
 ##             Load local files          ##

@@ -245,7 +245,14 @@ svm <-
   set_engine("kernlab")
 
 # Setup bootstrapping resample data z_rs
-z_rs <- bootstraps(z_train, times = 30)
+z_rs <- bootstraps(z_train, times = 100)
+
+# Setup parallel computing
+all_cores <- parallel::detectCores(logical = FALSE)
+
+cl <- makePSOCKcluster(all_cores)
+registerDoParallel(cl)
+
 
 SVM_recipe <-
   recipe(y ~ ., data = z_train) # %>%
@@ -273,3 +280,5 @@ show_best(recipe_res, metric = "accuracy")
 
 
 ```
+
+
