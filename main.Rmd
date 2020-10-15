@@ -178,7 +178,6 @@ plot_pca(pca_dist, y = z$y, title = "on euclidean distance", save=TRUE, include_
 
 rbfkernel <- rbfdot(sigma = 0.1)
 
-f <- kernelMatrix(rbfkernel, as.matrix(z))
 f <- kernelMatrix(rbfkernel, as.matrix(subset(z, select = -y)))
 
 pca <- prcomp(f, center = TRUE, scale=FALSE)
@@ -189,7 +188,7 @@ plot_pca(pca, y = z$y, title = "kernel", save=TRUE, include_3D = TRUE, PC_x = 1,
 
 ```{r gridsearch}
 # Set x_bin (x binary) to the unnormalised x dataframe
-X_bin <- x
+x_bin <- x
 # Attach the classes (y) to x_bin
 x_bin$y <- y
 # Only keep class 1 & 2
@@ -257,7 +256,7 @@ show_best(recipe_res, metric = "accuracy")
 
 ```
 
-```{r SVM}
+```{r SVM_rbg}
 # Set seed to ensure reproducibility
 set.seed(4685)
 
@@ -295,4 +294,113 @@ test_results <-
 # Compute the confusion matrix and evaluate the SVM performance
 caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_results[['True class']]))
 
+# Generate PCA plot with svm misclassification information
+pca <- prcomp(x_bin_test, center = TRUE, scale=FALSE)
+correctly_classified <- test_results$'Predicted class' == test_results$'True class'
+
+x_bin_test_norm <- bake(SVM_recipe, x_bin_test)
+
+f <- kernelMatrix(rbfkernel, as.matrix(x_bin_test_norm))
+
+pca <- prcomp(f, center = TRUE, scale=TRUE)
+
+plot_pca(pca, correctly_classified)
+
+```
+
+
+```{r SVM_lin}
+# Set seed to ensure reproducibility
+set.seed(4685)
+
+# Split data in training and test set
+data_split <- initial_split(x_bin, strata = "y", p = 0.9)
+x_bin_train <- training(data_split)
+x_bin_test <- testing(data_split)
+
+# Remove y from the training and test set
+x_bin_train_y <- x_bin_train$y
+x_bin_test_y <- x_bin_test$y
+x_bin_train <- subset(x_bin_train, select = -y)
+x_bin_test <- subset(x_bin_test, select = -y)
+
+# Create svm model
+svm <- svm(x_bin_train, x_bin_train_y, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 1)
+
+# Fit the SVM model on t he training data
+svm_fit <- 
+  svm %>%
+  set_engine("kernlab") %>%
+  fit_xy(
+    x = x_bin_train,
+    y = factor(x_bin_train_y)
+  )
+
+# Evaluate the SVM model on the test data
+test_results <- 
+  x_bin_test_y %>%
+  bind_cols(
+    predict(svm_fit, new_data = x_bin_test)) %>%
+  setNames(c('True class', 'Predicted class'))
+  
+
+# Compute the confusion matrix and evaluate the SVM performance
+caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_results[['True class']]))
+
+# Generate PCA plot with svm misclassification information
+pca <- prcomp(x_bin_test, center = TRUE, scale=FALSE)
+correctly_classified <- test_results$'Predicted class' == test_results$'True class'
+
+x_bin_test_norm <- bake(SVM_recipe, x_bin_test)
+
+f <- kernelMatrix(rbfkernel, as.matrix(x_bin_test_norm))
+
+pca <- prcomp(f, center = TRUE, scale=TRUE)
+
+plot_pca(pca, correctly_classified)
+
+
+```
+
+```{R roc}
+simple_roc <- function(labels, scores){
+  labels <- labels[order(scores, decreasing=TRUE)]
+  data.frame(TPR=cumsum(labels)/sum(labels), FPR=cumsum(!labels)/sum(!labels), labels)
+}
+
+simple_roc(as.numeric(test_results$`True class`), as.numeric(test_results$`Predicted class`))
+
+
+
+
+
+
+
+
+if (!requireNamespace("pROC", quietly = TRUE))
+  install.packages("pROC")
+
+library(pROC)
+
+## Type 'citation("pROC")' for a citation.
+
+## 
+## Attaching package: 'pROC'
+
+## The following objects are masked from 'package:stats':
+## 
+##     cov, smooth, var
+
+pROC_obj <- roc(as.numeric(test_results$`True class`), as.numeric(test_results$`Predicted class`),
+            smoothed = TRUE,
+            # arguments for ci
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            # arguments for plot
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+
+
+sens.ci <- ci.se(pROC_obj)
+
+plot(sens.ci, type="bars")
 ```

@@ -83,6 +83,9 @@ library(doParallel)
 # Normalisation
 library(caret)
 
+# SVM
+library(e1071)
+
 #=========================================#
 ##             Load local files          ##
 #=========================================#
