@@ -62,6 +62,8 @@ if (!requireNamespace("modelr", quietly = TRUE))
 if (!requireNamespace("doParallel", quietly = TRUE))
   install.packages("doParallel")
 
+if (!requireNamespace("tictoc", quietly = TRUE))
+  install.packages("tictoc")
 
 #=========================================#
 ##              Load packages            ##
@@ -79,6 +81,7 @@ library(tidyverse)
 library(tidymodels)
 library(kernlab)
 library(doParallel)
+library(tictoc)
 
 # Normalisation
 library(caret)

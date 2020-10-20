@@ -215,11 +215,12 @@ svm <-
 x_bin_rs <- bootstraps(x_bin_train, times = 100)
 
 # Setup parallel computing
-all_cores <- parallel::detectCores(logical = FALSE)
-
+# Detect number of available threads (to use number of cores set logical to FALSE)
+all_cores <- parallel::detectCores(logical = TRUE)
+# Generate one R process for each core
 cl <- makePSOCKcluster(all_cores)
+# Register the paralel backedn for the cluster of processes
 registerDoParallel(cl)
-
 
 SVM_recipe <-
   # Specify the recipe function, here the variable you want to predict should be put the left of the ~ sign,
@@ -235,24 +236,35 @@ SVM_recipe <-
 # Prepare the recipe on the training data so it can also be applied to other data
 SVM_recipe <- prep(SVM_recipe, x_bin_train)
 
+# Set options for the grid search
+ctrl <- control_grid(verbose = TRUE)
 
-ctrl <- control_grid(verbose = FALSE)
+# Set the metric to optimise
+metric <- metric_set(accuracy)
 
-roc_vals <- metric_set(accuracy)
+# Start timer
+tic()
 
 recipe_res <-
   svm %>% 
   tune_grid(
     SVM_recipe,
     resamples = x_bin_rs,
-    metrics = roc_vals,
+    grid = 10,
+    metrics = metric,
     control = ctrl
   )
 
+# show how long it took to optimise the svm model
+toc()
+
 recipe_res
 
-show_best(recipe_res, metric = "accuracy")
+# Stop the parallelisation
+stopCluster(cl)
 
+
+show_best(recipe_res, metric = "accuracy")
 
 ```
 
@@ -298,6 +310,9 @@ caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_re
 pca <- prcomp(x_bin_test, center = TRUE, scale=FALSE)
 correctly_classified <- test_results$'Predicted class' == test_results$'True class'
 
+# Prepare the recipe
+SVM_recipe <- prep(SVM_recipe)
+
 x_bin_test_norm <- bake(SVM_recipe, x_bin_test)
 
 f <- kernelMatrix(rbfkernel, as.matrix(x_bin_test_norm))
@@ -326,6 +341,11 @@ x_bin_test <- subset(x_bin_test, select = -y)
 
 # Create svm model
 svm <- svm(x_bin_train, x_bin_train_y, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 1)
+
+
+pred <- predict(svm, x_bin_train)
+
+table(pred, x_bin_train_y)
 
 # Fit the SVM model on t he training data
 svm_fit <- 
@@ -381,15 +401,6 @@ if (!requireNamespace("pROC", quietly = TRUE))
   install.packages("pROC")
 
 library(pROC)
-
-## Type 'citation("pROC")' for a citation.
-
-## 
-## Attaching package: 'pROC'
-
-## The following objects are masked from 'package:stats':
-## 
-##     cov, smooth, var
 
 pROC_obj <- roc(as.numeric(test_results$`True class`), as.numeric(test_results$`Predicted class`),
             smoothed = TRUE,
