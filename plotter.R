@@ -1,7 +1,8 @@
-plot_pca <- function(pca, y, type = 'regular', PC_x = 1, PC_y = 2, PC_z=3, title = "PCA score plot", save=FALSE, include_3D = FALSE){
+plot_pca <- function(pca, y, type = 'regular', PC_x = 1, PC_y = 2, PC_z=3, title = "",
+                     save=FALSE, include_3D = FALSE, alpha = 1, legend_title = 'legend'){
   # This function take the pca variable generetad by prcomp() and visualises it.
   # By default it plots a histogram of the variance percentage of the PCs
-  # Also, it plots a PCA plot of the two specified PCs.
+  # Also, it plots a PCA plot of the specified PCs.
   
   
   
@@ -16,13 +17,16 @@ plot_pca <- function(pca, y, type = 'regular', PC_x = 1, PC_y = 2, PC_z=3, title
   pca.data <- data.frame(Sample=y, X = pca$x[,PC_x], Y = pca$x[,PC_y])
   
   # Plot the PCs of interest
-  PCA_score_plot <- ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, color = factor(Sample))) +
-                            geom_point() +
+  PCA_score_plot <- ggplot(data = pca.data, aes(x=X, y=Y, label = Sample, colour = factor(Sample))) +
+                            geom_point(alpha = alpha) +
                             xlab(paste(colnames(pca$x)[PC_x], " - ", pca.var.per[PC_x], "%", sep="")) +
                             ylab(paste(colnames(pca$x)[PC_y], " - ", pca.var.per[PC_y], "%", sep="")) +
                             theme_bw() +
                             coord_fixed(1) +
-                            ggtitle(paste("PCA score plot", title))
+                            ggtitle(paste("PCA score plot: ", title))
+  
+  # Add legend title
+  PCA_score_plot <- PCA_score_plot + scale_colour_discrete(name = legend_title)
   
   print(PCA_score_plot)
   
@@ -111,5 +115,33 @@ plot_heatmap <- function(x, title = "Heatmap", save = FALSE){
     hm <- heatmap(x, Rowv = NA, Colv = NA, labRow = z$y, labCol = z$y, scale="none", main = title)
     dev.off()
   }
+  
+}
+
+
+pca_projection <- function(train, test, recipe){
+  # This function performs pca on a training set, plots it, and projects the set set on top of the PCA
+  # Prepare the recipe
+  SVM_recipe <- prep(SVM_recipe)
+  
+  test_norm <- bake(SVM_recipe, x_bin_test)
+  train_norm <- bake(SVM_recipe, x_bin_train)
+  
+  # Perform PCA on training set
+  pca <- prcomp(subset(train_norm, select = -y), center = FALSE, scale=FALSE)
+  train_scores <- data.frame(pca$x)
+  train_scores$type <- rep('train', nrow(pca$x))
+  
+  # Project test set onto the PCA of the training set
+  test_proj <- data.frame(as.matrix(subset(test_norm, select = -y)) %*% pca$rotation)
+  test_proj$type <- rep('test', nrow(test_proj))
+  
+  # Combine PcA and projection in one variable
+  pca_proj <- rbind(train_scores, test_proj)
+  
+  ggplot(data = data.frame(Sample=pca_proj$type, X = pca_proj[,1], Y = pca_proj[,2]), aes(x=X, y=Y, colour = factor(Sample))) +
+    geom_point(alpha = 0.5) +
+    theme_bw() +
+    ggtitle(paste("PCA score plot of training data with projected test set", title))
   
 }

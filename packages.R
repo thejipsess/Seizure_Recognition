@@ -65,6 +65,11 @@ if (!requireNamespace("doParallel", quietly = TRUE))
 if (!requireNamespace("tictoc", quietly = TRUE))
   install.packages("tictoc")
 
+if (!requireNamespace("ROSE", quietly = TRUE))
+  install.packages("ROSE")
+
+
+
 #=========================================#
 ##              Load packages            ##
 #=========================================#
@@ -82,6 +87,8 @@ library(tidymodels)
 library(kernlab)
 library(doParallel)
 library(tictoc)
+library(ROSE)
+
 
 # Normalisation
 library(caret)
@@ -93,3 +100,4 @@ library(e1071)
 ##             Load local files          ##
 #=========================================#
 source("plotter.R")
+source("classification.R")

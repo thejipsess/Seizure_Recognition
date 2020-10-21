@@ -187,101 +187,32 @@ plot_pca(pca, y = z$y, title = "kernel", save=TRUE, include_3D = TRUE, PC_x = 1,
 ```
 
 ```{r gridsearch}
-# Set x_bin (x binary) to the unnormalised x dataframe
-x_bin <- x
-# Attach the classes (y) to x_bin
-x_bin$y <- y
-# Only keep class 1 & 2
-x_bin <- x_bin[y == 1 | y == 2,]
-# Order the rows on the y column
-x_bin <- arrange(x_bin, y)
+# Split the data into train and test set using the function from 'Classification.R'
+split_data <- split_test_train(x, y)
 
-# Change y into factor
-x_bin$y <- factor(x_bin$y)
+# Balance the data by random oversampling
+# Determine the number of of samples in the biggest class
+max_train_class <- max(table(split_data$train$y))
+max_test_calss <- max(table(split_data$test$y))
 
-# Split data in training and test set
-data_split <- initial_split(x_bin, strata = "y", p = 0.9)
-x_bin_train <- training(data_split)
-x_bin_test <- testing(data_split)
+# Oversample the minority class(es)
+x_bin_train <- ovun.sample(y ~ ., split_data$train, method = 'over', N = max_train_class * length(classes), )$data
+x_bin_test <- ovun.sample(y ~ ., split_data$test, method = 'over', N = max_test_calss * length(classes), )$data
 
+# Check  if test and training set are balanced
+print("Class balance of training set:")
+print(table(x_bin_train$y)/length(x_bin_train$y)*100)
+print("Class balance of test set:")
+print(table(x_bin_test$y)/length(x_bin_test$y)*100)
 
-# Create SVM model with hyperparameter tuning capabilities
-svm <-
-  svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
-  set_mode("classification") %>%
-  set_engine("kernlab")
-
-# Setup bootstrapping resample data x_bin_rs
-x_bin_rs <- bootstraps(x_bin_train, times = 100)
-
-# Setup parallel computing
-# Detect number of available threads (to use number of cores set logical to FALSE)
-all_cores <- parallel::detectCores(logical = TRUE)
-# Generate one R process for each core
-cl <- makePSOCKcluster(all_cores)
-# Register the paralel backedn for the cluster of processes
-registerDoParallel(cl)
-
-SVM_recipe <-
-  # Specify the recipe function, here the variable you want to predict should be put the left of the ~ sign,
-  # and the predictor variables go to the right of the ~ symbol, since we want to use all other variables we use a dot (y ~ .)
-  # We also specify data = x_bin_train such that the recipe will be based on the training data and we can apply an identical
-  # transformation to the test set later on, and thus also to any other future data the model shoul be run on.
-  recipe(y ~ ., data = x_bin_train) %>%
-    # Set the mean of all predictor variables to 0
-    step_center(all_predictors()) %>%
-    # Here we fix the range of all the predictor variables of 0 to 1. (min-max normalisation)
-    step_range(all_predictors(), min = 0, max = 1)
-
-# Prepare the recipe on the training data so it can also be applied to other data
-SVM_recipe <- prep(SVM_recipe, x_bin_train)
-
-# Set options for the grid search
-ctrl <- control_grid(verbose = TRUE)
-
-# Set the metric to optimise
-metric <- metric_set(accuracy)
-
-# Start timer
-tic()
-
-recipe_res <-
-  svm %>% 
-  tune_grid(
-    SVM_recipe,
-    resamples = x_bin_rs,
-    grid = 10,
-    metrics = metric,
-    control = ctrl
-  )
-
-# show how long it took to optimise the svm model
-toc()
-
-recipe_res
-
-# Stop the parallelisation
-stopCluster(cl)
-
-
-show_best(recipe_res, metric = "accuracy")
+# Perform gridsearch
+gridsearch_svm(x_bin_train, SVM_recipe)
 
 ```
 
 ```{r SVM_rbg}
 # Set seed to ensure reproducibility
 set.seed(4685)
-
-# Split data in training and test set
-data_split <- initial_split(x_bin, strata = "y", p = 0.9)
-x_bin_train <- training(data_split)
-x_bin_test <- testing(data_split)
-
-# Remove y from the training and test set
-x_bin_train_y <- x_bin_train$y
-x_bin_test_y <- x_bin_test$y
-x_bin_train <- subset(x_bin_train, select = -y)
-x_bin_test <- subset(x_bin_test, select = -y)
 
 # Create svm model
 svm <- svm_rbf(mode = "classification", cost = 5.004239542, rbf_sigma = 0.03505893)
@@ -290,37 +221,29 @@ svm <- svm_rbf(mode = "classification", cost = 5.004239542, rbf_sigma = 0.035058
 svm_fit <- 
   svm %>%
   set_engine("kernlab") %>%
-  fit_xy(
-    x = x_bin_train,
-    y = factor(x_bin_train_y)
-  )
+  fit(y ~ ., x_bin_train)
 
 # Evaluate the SVM model on the test data
 test_results <- 
-  x_bin_test_y %>%
+  x_bin_test$y %>%
   bind_cols(
     predict(svm_fit, new_data = x_bin_test)) %>%
   setNames(c('True class', 'Predicted class'))
   
-
 # Compute the confusion matrix and evaluate the SVM performance
 caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_results[['True class']]))
 
 # Generate PCA plot with svm misclassification information
-pca <- prcomp(x_bin_test, center = TRUE, scale=FALSE)
-correctly_classified <- test_results$'Predicted class' == test_results$'True class'
+correctly_classified_test <- test_results$'Predicted class' == test_results$'True class'
 
-# Prepare the recipe
-SVM_recipe <- prep(SVM_recipe)
+# PLot PCA of test sete with labels for misclassification
+SVM_recipe <- prep(SVM_recipe, x_bin_train)
+test_norm <- bake(SVM_recipe, x_bin_test)
+pca <- prcomp(subset(test_norm, select = -y), center = F, scale = F)
+plot_pca(pca, correctly_classified_test, alpha = 0.5, title = "Test set with misclassifications", legend_title = 'Correct prediction')
 
-x_bin_test_norm <- bake(SVM_recipe, x_bin_test)
-
-f <- kernelMatrix(rbfkernel, as.matrix(x_bin_test_norm))
-
-pca <- prcomp(f, center = TRUE, scale=TRUE)
-
-plot_pca(pca, correctly_classified)
-
+# Plot PCA of training set and project test set onto it (this function is in  'plotter.R')
+pca_projection(x_bin_train, x_bin_test, SVM_recipe)
 ```
 
 
@@ -328,41 +251,15 @@ plot_pca(pca, correctly_classified)
 # Set seed to ensure reproducibility
 set.seed(4685)
 
-# Split data in training and test set
-data_split <- initial_split(x_bin, strata = "y", p = 0.9)
-x_bin_train <- training(data_split)
-x_bin_test <- testing(data_split)
-
-# Remove y from the training and test set
-x_bin_train_y <- x_bin_train$y
-x_bin_test_y <- x_bin_test$y
-x_bin_train <- subset(x_bin_train, select = -y)
-x_bin_test <- subset(x_bin_test, select = -y)
+SVM_recipe <- prep(SVM_recipe, x_bin_train)
+train_norm <- bake(SVM_recipe, x_bin_rain)
 
 # Create svm model
-svm <- svm(x_bin_train, x_bin_train_y, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 1)
+svm <- svm(y ~ ., train_norm, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 1)
 
+pred <- predict(svm, train_norm)
 
-pred <- predict(svm, x_bin_train)
-
-table(pred, x_bin_train_y)
-
-# Fit the SVM model on t he training data
-svm_fit <- 
-  svm %>%
-  set_engine("kernlab") %>%
-  fit_xy(
-    x = x_bin_train,
-    y = factor(x_bin_train_y)
-  )
-
-# Evaluate the SVM model on the test data
-test_results <- 
-  x_bin_test_y %>%
-  bind_cols(
-    predict(svm_fit, new_data = x_bin_test)) %>%
-  setNames(c('True class', 'Predicted class'))
-  
+table(pred, train_norm$y)
 
 # Compute the confusion matrix and evaluate the SVM performance
 caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_results[['True class']]))
