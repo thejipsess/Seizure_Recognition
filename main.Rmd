@@ -28,6 +28,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This section loads all the the required packages and the data. Also, it removes missing data and splits the data into dependant and independant data.
 ```{r data, echo=FALSE, message = FALSE}
+# Set seed to ensure reproducibility
+set.seed(4685)
+
+# Load packages.R to install and load all the required packages and files
 source('packages.R')
 
 # Load data
@@ -35,7 +39,7 @@ x = read.csv('Data/data.csv', sep = ';', row.names = 'X')
 # Remove rows with missing data
 x <- na.omit(x)
 
-# Permute y to create random data
+# Randomly permute y to create randomised data
 permute <- FALSE
 if(permute){
   set.seed(4685)
@@ -172,6 +176,9 @@ open3d()
 
 # Plot PCA plots including 3D score plot
 plot_pca(pca_dist, y = z$y, title = "on euclidean distance", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
+
+# Export 3D RGL device to html
+writeWebGL(dir = "Figures", filename = "3d PCA.html")
 ```
 
 ```{r gaussian_kernel}
@@ -186,18 +193,19 @@ plot_pca(pca, y = z$y, title = "kernel", save=TRUE, include_3D = TRUE, PC_x = 1,
 
 ```
 
-```{r gridsearch}
+```{r gridsearch_rbf}
 # Split the data into train and test set using the function from 'Classification.R'
-split_data <- split_test_train(x, y)
+split_data <- split_test_train(x, y, classes = c(1, 2))
 
 # Balance the data by random oversampling
 # Determine the number of of samples in the biggest class
 max_train_class <- max(table(split_data$train$y))
-max_test_calss <- max(table(split_data$test$y))
+max_test_class <- max(table(split_data$test$y))
 
 # Oversample the minority class(es)
 x_bin_train <- ovun.sample(y ~ ., split_data$train, method = 'over', N = max_train_class * length(classes), )$data
-x_bin_test <- ovun.sample(y ~ ., split_data$test, method = 'over', N = max_test_calss * length(classes), )$data
+#x_bin_test <- ovun.sample(y ~ ., split_data$test, method = 'over', N = max_test_class * length(classes), )$data
+x_bin_test <- split_data$test
 
 # Check  if test and training set are balanced
 print("Class balance of training set:")
@@ -205,8 +213,20 @@ print(table(x_bin_train$y)/length(x_bin_train$y)*100)
 print("Class balance of test set:")
 print(table(x_bin_test$y)/length(x_bin_test$y)*100)
 
+# Create preprocessing recipe
+SVM_recipe <-
+    # Specify the recipe function, here the variable you want to predict should be put the left of the ~ sign,
+    # and the predictor variables go to the right of the ~ symbol, since we want to use all other variables we use a dot (y ~ .)
+    # We also specify data = x_bin_train such that the recipe will be based on the training data and we can apply an identical
+    # transformation to the test set later on, and thus also to any other future data the model shoul be run on.
+    recipe(y ~ ., data = x_bin_train) %>%
+    # Set the mean of all predictor variables to 0
+    step_center(all_predictors()) %>%
+    # Here we fix the range of all the predictor variables of 0 to 1. (min-max normalisation)
+    step_range(all_predictors(), min = 0, max = 1)
+
 # Perform gridsearch
-gridsearch_svm(x_bin_train, SVM_recipe)
+gridsearch_result <- gridsearch_svm_rbf(x_bin_train, SVM_recipe)
 
 ```
 
@@ -224,26 +244,46 @@ svm_fit <-
   fit(y ~ ., x_bin_train)
 
 # Evaluate the SVM model on the test data
-test_results <- 
+test_results_rbf <- 
   x_bin_test$y %>%
   bind_cols(
-    predict(svm_fit, new_data = x_bin_test)) %>%
+    predict(svm_fit, x_bin_test)) %>%
   setNames(c('True class', 'Predicted class'))
   
 # Compute the confusion matrix and evaluate the SVM performance
-caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_results[['True class']]))
+caret::confusionMatrix(factor(test_results_rbf[['Predicted class']]), factor(test_results_rbf[['True class']]))
 
 # Generate PCA plot with svm misclassification information
-correctly_classified_test <- test_results$'Predicted class' == test_results$'True class'
+correctly_classified_test <- test_results_rbf$'Predicted class' == test_results_rbf$'True class'
 
 # PLot PCA of test sete with labels for misclassification
 SVM_recipe <- prep(SVM_recipe, x_bin_train)
+train_norm <- bake(SVM_recipe, x_bin_train)
 test_norm <- bake(SVM_recipe, x_bin_test)
 pca <- prcomp(subset(test_norm, select = -y), center = F, scale = F)
 plot_pca(pca, correctly_classified_test, alpha = 0.5, title = "Test set with misclassifications", legend_title = 'Correct prediction')
 
 # Plot PCA of training set and project test set onto it (this function is in  'plotter.R')
 pca_projection(x_bin_train, x_bin_test, SVM_recipe)
+
+# Plot density plots of the training and test before and after preprocessing
+plot_dens(data.frame(subset(test_norm, select = -y)))
+plot_dens(data.frame(subset(train_norm, select = -y)))
+plot_dens(data.frame(subset(x_bin_train, select = -y)))
+plot_dens(data.frame(subset(x_bin_test, select = -y)))
+```
+```{r gridsearch_lin}
+# Set cost values to evaluate
+cost_range = seq(1, 50, by = 4)
+cost_range = 10^(-2:1)
+
+# Perform gridsearch
+model_opt <- gridsearch_svm_lin(train_norm, SVM_recipe, cost_range)
+
+
+#model_opt = tune.svm(y ~ ., data = train_norm, type = "nu-classification", kernel = 'linear', cost = 10^(-1:2))
+#model_opt = tune.svm(y ~ ., data = train_norm, type = "C-classification", kernel = 'polynomial', cost = 10^(-1:2))
+
 ```
 
 
@@ -251,22 +291,28 @@ pca_projection(x_bin_train, x_bin_test, SVM_recipe)
 # Set seed to ensure reproducibility
 set.seed(4685)
 
-SVM_recipe <- prep(SVM_recipe, x_bin_train)
-train_norm <- bake(SVM_recipe, x_bin_rain)
-
 # Create svm model
-svm <- svm(y ~ ., train_norm, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 1)
+svm_lin <- svm(y ~ ., train_norm, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 0.1, probability = T)
 
-pred <- predict(svm, train_norm)
+pred <- predict(svm_lin, train_norm)
 
 table(pred, train_norm$y)
 
+# Evaluate the SVM model on the test data
+test_results_lin <- 
+  test_norm$y %>%
+  bind_cols(
+    predict(svm_lin, test_norm)) %>%
+  setNames(c('True class', 'Predicted class'))
+
 # Compute the confusion matrix and evaluate the SVM performance
-caret::confusionMatrix(factor(test_results[['Predicted class']]), factor(test_results[['True class']]))
+caret::confusionMatrix(factor(test_results_lin[['Predicted class']]), factor(test_results_lin[['True class']]))
+
+
 
 # Generate PCA plot with svm misclassification information
 pca <- prcomp(x_bin_test, center = TRUE, scale=FALSE)
-correctly_classified <- test_results$'Predicted class' == test_results$'True class'
+correctly_classified <- test_results_lin$'Predicted class' == test_results_lin$'True class'
 
 x_bin_test_norm <- bake(SVM_recipe, x_bin_test)
 
@@ -280,35 +326,27 @@ plot_pca(pca, correctly_classified)
 ```
 
 ```{R roc}
-simple_roc <- function(labels, scores){
-  labels <- labels[order(scores, decreasing=TRUE)]
-  data.frame(TPR=cumsum(labels)/sum(labels), FPR=cumsum(!labels)/sum(!labels), labels)
-}
+# Predict probabilities on test set with rbf svm model
+test_results_rbf <- 
+  x_bin_test$y %>%
+  bind_cols(
+    predict(svm_fit, x_bin_test, type = 'prob')) %>%
+  setNames(c('True class', 'Predicted class'))
 
-simple_roc(as.numeric(test_results$`True class`), as.numeric(test_results$`Predicted class`))
+# Predict probabilities on test set with linear svm model
+test_results_lin <- 
+  x_bin_test$y %>%
+  bind_cols(
+    attr(predict(svm_lin, x_bin_test, probability = T), 'probabilities')[,1]) %>%
+  setNames(c('True class', 'Predicted class'))
 
+# Create ROC curve for the linear and rbf svm models
+par(pty = 's')
+roc(as.numeric(test_results_rbf$'True class'), as.numeric(test_results_rbf$'Predicted class'), plot = T, legacy.axes = T,
+     percent = T, xlab = "False postive %", ylab = "True positive percentage", print.auc = T, print.auc.y = 95, col = "cadetblue3")
+plot.roc(as.numeric(test_results_lin$'True class'), as.numeric(test_results_lin$'Predicted class'), percent = T,
+          print.auc = T, add = T, smoothed = F, col = "coral3")
+legend(39, 20, legend=c("rbf", "linear"),
+       col=c("cadetblue3", "coral3"), lty=1:2, cex=0.8)
 
-
-
-
-
-
-
-if (!requireNamespace("pROC", quietly = TRUE))
-  install.packages("pROC")
-
-library(pROC)
-
-pROC_obj <- roc(as.numeric(test_results$`True class`), as.numeric(test_results$`Predicted class`),
-            smoothed = TRUE,
-            # arguments for ci
-            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
-            # arguments for plot
-            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
-            print.auc=TRUE, show.thres=TRUE)
-
-
-sens.ci <- ci.se(pROC_obj)
-
-plot(sens.ci, type="bars")
 ```

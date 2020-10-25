@@ -68,6 +68,10 @@ if (!requireNamespace("tictoc", quietly = TRUE))
 if (!requireNamespace("ROSE", quietly = TRUE))
   install.packages("ROSE")
 
+if (!requireNamespace("pROC", quietly = TRUE))
+  install.packages("pROC")
+
+
 
 
 #=========================================#
@@ -88,6 +92,7 @@ library(kernlab)
 library(doParallel)
 library(tictoc)
 library(ROSE)
+library(pROC)
 
 
 # Normalisation
