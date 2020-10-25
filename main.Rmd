@@ -19,7 +19,7 @@ These chunks were shuffled, resulting in 11500 samples.
 2 - (epiliptic, intracranial recording) The EEG activity from the epileptogenic zone brain area with no seizure
 1 - (epiliptic, intracranial recording) Recording of seizure activity
 
-
+Seed used throughout this code: 4685
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -28,6 +28,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This section loads all the the required packages and the data. Also, it removes missing data and splits the data into dependant and independant data.
 ```{r data, echo=FALSE, message = FALSE}
+# Set seed to ensure reproducibility
+set.seed(4685)
+
+# Load packages.R to install and load all the required packages and files
 source('packages.R')
 
 # Load data
@@ -35,9 +39,11 @@ x = read.csv('Data/data.csv', sep = ';', row.names = 'X')
 # Remove rows with missing data
 x <- na.omit(x)
 
-# Permute y to create random data
-set.seed(4685)
-x$y <- sample(x$y)
+# Randomly permute y to create randomised data
+permute <- FALSE
+if(permute){
+  set.seed(4685)
+  x$y <- sample(x$y)}
   
 # Isolate y
 y <- x$y
@@ -51,6 +57,7 @@ x <- subset(x, select = -y)
 # Count missing data
 nullsum = sum(!complete.cases(x))
 
+# Set theme for plotting
 theme_set(theme_bw(base_size=12)+ 
   theme(panel.grid.major = element_blank(),
   panel.grid.minor = element_blank()))
@@ -86,12 +93,7 @@ plot_boxplot(x, y)
 
 
 ```{r Preprocessing}
-
-# Mean center and scale (divide by stdev) the data
-#preproc <- preProcess(x, method=c('center', 'scale'))
-#x <- predict(preproc, x)
-
-# Get rid of the most extreme outlier
+# Get rid of the most extreme outlier (redundant)
 row_max <- which(x == max(x), arr.ind = TRUE)[1]
 y <- y[-row_max]
 x <- x[-row_max,]
@@ -102,21 +104,20 @@ for(i in seq(1, 178)){
   Q1 <- quantile(x[,i], 0.25)
   Q3 <- quantile(x[,i], 0.75)
   IQR <- Q3 - Q1
-  uplim <- Q3 + 10*IQR
-  downlim <- Q1 - 10*IQR
+  uplim <- Q3 + 17*IQR
+  downlim <- Q1 - 17*IQR
   
   y <- y[x[names(x)[i]] <= uplim & x[names(x)[i]] >= downlim]
   x <- x[x[names(x)[i]] <= uplim & x[names(x)[i]] >= downlim,]
 }
 
-# mean-center: Set mean of each variable to 0
-# Scale: Unit variance scaling
+# mean-center the data: Set mean of each variable to 0
 preproc <- preProcess(x, method=c('center')) # Can also add 'scale'
-x <- predict(preproc, x)
+x_norm <- predict(preproc, x)
 
 # Min Max normalisation
-for (col in colnames(x)){
-  x[col] <- ((x[col] - min(x[col])) / (max(x[col]) - min(x[col])))
+for (col in colnames(x_norm)){
+  x_norm[col] <- ((x_norm[col] - min(x_norm[col])) / (max(x_norm[col]) - min(x_norm[col])))
 }
 
 ```
@@ -124,19 +125,19 @@ for (col in colnames(x)){
 
 ```{r Plot_data_after}
 # Create density plot of unnormalised data
-plot_dens(x, "Data distribution (pre-processed)")
+plot_dens(x_norm, "Data distribution (pre-processed)")
 
 # Make violin plots for the different classes
-plot_violin(x, y, title = "violin plot for all classes (not pre-processed)")
+plot_violin(x_norm, y, title = "violin plot for all classes (not pre-processed)")
 
 # Create boxplots
-plot_boxplot(x, y)
+plot_boxplot(x_norm, y)
 ```
 
 
 ``` {r distance, message=FALSE}
 # create matrix z which contains both x and y, only for classes one and two
-z <- x
+z <- x_norm
 z$y <- y
 z <- z[y == 1 | y == 2,]
 z <- arrange(z, y)
@@ -168,52 +169,156 @@ pca_dist <- prcomp(distance, center = TRUE, scale=FALSE)
 # Open new RGL device to allow both 3D plots to be active simultaneously
 open3d()
 
-# Plot PCA plots including 3D score plot
+# Plot distance PCA plots including 3D score plot
 plot_pca(pca_dist, y = z$y, title = "on euclidean distance", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
 ```
 
-```{r gaussian_kernel}
+```{r rbf_kernel}
+# Claculate the radial basis function kernel on z 
+rbfkernel <- rbfdot(sigma = 0.01)
+rbf_mat <- kernelMatrix(rbfkernel, as.matrix(subset(z, select = -y)))
 
-rbfkernel <- rbfdot(sigma = 0.1)
+# Calculate PCA of the kernel matrix
+pca <- prcomp(rbf_mat, center = TRUE, scale=FALSE)
 
-f <- kernelMatrix(rbfkernel, as.matrix(z))
-
-pca <- prcomp(f, center = TRUE, scale=FALSE)
-
+# Create PCA scatter plots of rbf kernel
 plot_pca(pca, y = z$y, title = "kernel", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
+```
 
-pca_dist <- prcomp(distance, center = TRUE, scale=FALSE)
+```{r gridsearch_rbf}
+# Set Classes to use for classification
+classes = c(1, 2)
+
+# Split the data into train and test set using the function from 'Classification.R'
+split_data <- split_test_train(x, y, classes = classes)
+x_bin_train <- split_data$train
+x_bin_test <- split_data$test
+
+# Balance the data by random undersampling
+# Determine the number of of samples in the biggest class
+min_train_class <- min(table(split_data$train$y))
+min_test_class <- min(table(split_data$test$y))
+
+# Undersample the majority class(es) (UNCOMMENT NEXT LINES IF CLASSES ARE UNBALANCED)
+x_bin_train <- ovun.sample(y ~ ., x_bin_train, method = 'under', N = min_train_class * length(classes), )$data
+x_bin_test <- ovun.sample(y ~ ., x_bin_test, method = 'under', N = min_test_class * length(classes), )$data
+
+
+# Check  if test and training set are balanced
+print("Class balance of training set:")
+print(table(x_bin_train$y)/length(x_bin_train$y)*100)
+print("Class balance of test set:")
+print(table(x_bin_test$y)/length(x_bin_test$y)*100)
+
+# Create preprocessing recipe
+SVM_recipe <-
+    # Specify the recipe function, here the variable you want to predict should be put the left of the ~ sign,
+    # and the predictor variables go to the right of the ~ symbol, since we want to use all other variables we use a dot (y ~ .)
+    # We also specify data = x_bin_train such that the recipe will be based on the training data and we can apply an identical
+    # transformation to the test set later on, and thus also to any other future data the model shoul be run on.
+    recipe(y ~ ., data = x_bin_train) %>%
+    # Set the mean of all predictor variables to 0
+    step_center(all_predictors()) %>%
+    # Here we fix the range of all the predictor variables of 0 to 1. (min-max normalisation)
+    step_range(all_predictors(), min = 0, max = 1)
+
+# Perform gridsearch
+gridsearch_result <- gridsearch_svm_rbf(x_bin_train, SVM_recipe = SVM_recipe)
 
 ```
 
-
-```{r SVM}
+```{r SVM_rbg}
+# Set seed to ensure reproducibility
 set.seed(4685)
-data_split <- initial_split(z, strata = "y", p = 0.9)
 
-z_train <- training(data_split)
-z_test <- testing(data_split)
+# Create svm model
+svm <- svm_rbf(mode = "classification", cost = 10, rbf_sigma = 0.01)
 
-svm <- svm_rbf(mode = "classification", cost = 1, rbf_sigma = 0.1)
-svm
-
+# Fit the SVM model on t he training data
 svm_fit <- 
   svm %>%
   set_engine("kernlab") %>%
-  fit_xy(
-    x = z[,-ncol(z)],
-    y = factor(z$y)
-  )
-svm_fit
+  fit(y ~ ., x_bin_train)
 
-test_results <- 
-  z_test %>%
-  select(y) %>%
+# Evaluate the SVM model on the test data
+test_results_rbf <- 
+  x_bin_test$y %>%
   bind_cols(
-    predict(svm_fit, new_data = z_test[,-ncol(z)])
-  )
+    predict(svm_fit, x_bin_test)) %>%
+  setNames(c('True class', 'Predicted class'))
+  
+# Compute the confusion matrix and evaluate the SVM performance
+caret::confusionMatrix(factor(test_results_rbf[['Predicted class']]), factor(test_results_rbf[['True class']]))
 
-caret::confusionMatrix(factor(test_results[['.pred_class']]), factor(test_results[['y']]))
+# Generate PCA plot with svm misclassification information
+correctly_classified_test <- test_results_rbf$'Predicted class' == test_results_rbf$'True class'
+
+# PLot PCA of test sete with labels for misclassification
+SVM_recipe <- prep(SVM_recipe, x_bin_train)
+train_norm <- bake(SVM_recipe, x_bin_train)
+test_norm <- bake(SVM_recipe, x_bin_test)
+pca <- prcomp(subset(test_norm, select = -y), center = F, scale = F)
+plot_pca(pca, correctly_classified_test, alpha = 0.5, title = "Test set with misclassifications", legend_title = 'Correct prediction')
+
+# Plot PCA of training set and project test set onto it (this function is in  'plotter.R')
+pca_projection(x_bin_train, x_bin_test, SVM_recipe)
+
+# Plot density plots of the training and test before and after preprocessing
+#plot_dens(data.frame(subset(test_norm, select = -y)))
+#plot_dens(data.frame(subset(train_norm, select = -y)))
+#plot_dens(data.frame(subset(x_bin_train, select = -y)))
+#plot_dens(data.frame(subset(x_bin_test, select = -y)))
+```
+```{r gridsearch_lin}
+# Set cost values to evaluate
+cost_range = 10^(-3:1)
+
+# Perform gridsearch
+lin_model_opt = tune.svm(y ~ ., data = train_norm, type = "nu-classification", kernel = 'linear', cost = cost_range)
 
 ```
 
+
+```{r SVM_lin}
+# Set seed to ensure reproducibility
+set.seed(4685)
+
+# Create svm model
+svm_lin <- svm(y ~ ., train_norm, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 0.00001, probability = T)
+
+# Evaluate the SVM model on the test data
+test_results_lin <- 
+  test_norm$y %>%
+  bind_cols(
+    predict(svm_lin, test_norm)) %>%
+  setNames(c('True class', 'Predicted class'))
+
+# Compute the confusion matrix and evaluate the SVM performance
+caret::confusionMatrix(factor(test_results_lin[['Predicted class']]), factor(test_results_lin[['True class']]))
+```
+
+```{R roc}
+# Predict probabilities on test set with rbf svm model
+test_results_rbf <- 
+  x_bin_test$y %>%
+  bind_cols(
+    predict(svm_fit, x_bin_test, type = 'prob')) %>%
+  setNames(c('True class', 'Predicted class'))
+
+# Predict probabilities on test set with linear svm model
+test_results_lin <- 
+  x_bin_test$y %>%
+  bind_cols(
+    attr(predict(svm_lin, x_bin_test, probability = T), 'probabilities')[,1]) %>%
+  setNames(c('True class', 'Predicted class'))
+
+# Create ROC curve for the linear and rbf svm models
+par(pty = 's')
+roc(as.numeric(test_results_rbf$'True class'), as.numeric(test_results_rbf$'Predicted class'), plot = T, legacy.axes = T,
+     percent = T, xlab = "False postive %", ylab = "True positive %", print.auc = T, print.auc.y = 95, col = "cadetblue3")
+plot.roc(as.numeric(test_results_lin$'True class'), as.numeric(test_results_lin$'Predicted class'), percent = T,
+          print.auc = T, add = T, smoothed = F, col = "coral3")
+legend(39, 20, legend=c("rbf", "linear"),
+       col=c("cadetblue3", "coral3"), lty=1:2, cex=0.8)
+
+```
