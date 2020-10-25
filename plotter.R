@@ -142,6 +142,6 @@ pca_projection <- function(train, test, recipe){
   ggplot(data = data.frame(Sample=pca_proj$type, X = pca_proj[,1], Y = pca_proj[,2]), aes(x=X, y=Y, colour = factor(Sample))) +
     geom_point(alpha = 0.5) +
     theme_bw() +
-    ggtitle(paste("PCA score plot of training data with projected test set", title))
+    ggtitle("PCA score plot of training data with projected test set")
   
 }

@@ -1,4 +1,7 @@
 split_test_train <- function(x, y = NULL, classes = c(1,2)){
+  # Set seed to ensure reproducibility
+  set.seed(4685)
+  
   # Set x_bin (x binary) to the unnormalised x dataframe
   x_bin <- x
   
@@ -55,6 +58,9 @@ gridsearch_svm_rbf <- function(x, y = NULL, SVM_recipe, parallel = T){
   # Set options for the grid search
   ctrl <- control_grid(verbose = TRUE)
   
+  # Define the search space for the hyperparameters
+  search_grid <- expand_grid(cost = 10^(-2:1), rbf_sigma = 10^(-4:0))
+  
   # Set the metric to optimise
   metric <- metric_set(accuracy)
   
@@ -66,7 +72,7 @@ gridsearch_svm_rbf <- function(x, y = NULL, SVM_recipe, parallel = T){
     tune_grid(
       SVM_recipe,
       resamples = x_bin_rs,
-      grid = 10,
+      grid = search_grid,
       metrics = metric,
       control = ctrl
     )
@@ -85,15 +91,4 @@ gridsearch_svm_rbf <- function(x, y = NULL, SVM_recipe, parallel = T){
   show_best(recipe_res, metric = "accuracy")
   
   return(recipe_res)
-}
-
-
-gridsearch_svm_lin <- function(x, y = NULL, SVM_recipe, parallel = T, cost_range = 1:10){
-  # This function performs a gridsearch to optimise the hyperparameters for a linear kernel svm model.
-
-  
-  model_opt = tune.svm(y ~ ., data = x, type = "nu-classification", kernel = 'linear', cost = cost_range)
-
-  return(model_opt)
-  
 }

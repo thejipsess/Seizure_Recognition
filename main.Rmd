@@ -19,7 +19,7 @@ These chunks were shuffled, resulting in 11500 samples.
 2 - (epiliptic, intracranial recording) The EEG activity from the epileptogenic zone brain area with no seizure
 1 - (epiliptic, intracranial recording) Recording of seizure activity
 
-
+Seed used throughout this code: 4685
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -57,6 +57,7 @@ x <- subset(x, select = -y)
 # Count missing data
 nullsum = sum(!complete.cases(x))
 
+# Set theme for plotting
 theme_set(theme_bw(base_size=12)+ 
   theme(panel.grid.major = element_blank(),
   panel.grid.minor = element_blank()))
@@ -92,12 +93,7 @@ plot_boxplot(x, y)
 
 
 ```{r Preprocessing}
-
-# Mean center and scale (divide by stdev) the data
-#preproc <- preProcess(x, method=c('center', 'scale'))
-#x <- predict(preproc, x)
-
-# Get rid of the most extreme outlier
+# Get rid of the most extreme outlier (redundant)
 row_max <- which(x == max(x), arr.ind = TRUE)[1]
 y <- y[-row_max]
 x <- x[-row_max,]
@@ -108,15 +104,14 @@ for(i in seq(1, 178)){
   Q1 <- quantile(x[,i], 0.25)
   Q3 <- quantile(x[,i], 0.75)
   IQR <- Q3 - Q1
-  uplim <- Q3 + 10*IQR
-  downlim <- Q1 - 10*IQR
+  uplim <- Q3 + 17*IQR
+  downlim <- Q1 - 17*IQR
   
   y <- y[x[names(x)[i]] <= uplim & x[names(x)[i]] >= downlim]
   x <- x[x[names(x)[i]] <= uplim & x[names(x)[i]] >= downlim,]
 }
 
-# mean-center: Set mean of each variable to 0
-# Scale: Unit variance scaling
+# mean-center the data: Set mean of each variable to 0
 preproc <- preProcess(x, method=c('center')) # Can also add 'scale'
 x_norm <- predict(preproc, x)
 
@@ -174,38 +169,40 @@ pca_dist <- prcomp(distance, center = TRUE, scale=FALSE)
 # Open new RGL device to allow both 3D plots to be active simultaneously
 open3d()
 
-# Plot PCA plots including 3D score plot
+# Plot distance PCA plots including 3D score plot
 plot_pca(pca_dist, y = z$y, title = "on euclidean distance", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
-
-# Export 3D RGL device to html
-writeWebGL(dir = "Figures", filename = "3d PCA.html")
 ```
 
-```{r gaussian_kernel}
+```{r rbf_kernel}
+# Claculate the radial basis function kernel on z 
+rbfkernel <- rbfdot(sigma = 0.01)
+rbf_mat <- kernelMatrix(rbfkernel, as.matrix(subset(z, select = -y)))
 
-rbfkernel <- rbfdot(sigma = 0.1)
+# Calculate PCA of the kernel matrix
+pca <- prcomp(rbf_mat, center = TRUE, scale=FALSE)
 
-f <- kernelMatrix(rbfkernel, as.matrix(subset(z, select = -y)))
-
-pca <- prcomp(f, center = TRUE, scale=FALSE)
-
+# Create PCA scatter plots of rbf kernel
 plot_pca(pca, y = z$y, title = "kernel", save=TRUE, include_3D = TRUE, PC_x = 1, PC_y = 2, PC_z=3)
-
 ```
 
 ```{r gridsearch_rbf}
+# Set Classes to use for classification
+classes = c(1, 2)
+
 # Split the data into train and test set using the function from 'Classification.R'
-split_data <- split_test_train(x, y, classes = c(1, 2))
-
-# Balance the data by random oversampling
-# Determine the number of of samples in the biggest class
-max_train_class <- max(table(split_data$train$y))
-max_test_class <- max(table(split_data$test$y))
-
-# Oversample the minority class(es)
-x_bin_train <- ovun.sample(y ~ ., split_data$train, method = 'over', N = max_train_class * length(classes), )$data
-#x_bin_test <- ovun.sample(y ~ ., split_data$test, method = 'over', N = max_test_class * length(classes), )$data
+split_data <- split_test_train(x, y, classes = classes)
+x_bin_train <- split_data$train
 x_bin_test <- split_data$test
+
+# Balance the data by random undersampling
+# Determine the number of of samples in the biggest class
+min_train_class <- min(table(split_data$train$y))
+min_test_class <- min(table(split_data$test$y))
+
+# Undersample the majority class(es) (UNCOMMENT NEXT LINES IF CLASSES ARE UNBALANCED)
+x_bin_train <- ovun.sample(y ~ ., x_bin_train, method = 'under', N = min_train_class * length(classes), )$data
+x_bin_test <- ovun.sample(y ~ ., x_bin_test, method = 'under', N = min_test_class * length(classes), )$data
+
 
 # Check  if test and training set are balanced
 print("Class balance of training set:")
@@ -226,7 +223,7 @@ SVM_recipe <-
     step_range(all_predictors(), min = 0, max = 1)
 
 # Perform gridsearch
-gridsearch_result <- gridsearch_svm_rbf(x_bin_train, SVM_recipe)
+gridsearch_result <- gridsearch_svm_rbf(x_bin_train, SVM_recipe = SVM_recipe)
 
 ```
 
@@ -235,7 +232,7 @@ gridsearch_result <- gridsearch_svm_rbf(x_bin_train, SVM_recipe)
 set.seed(4685)
 
 # Create svm model
-svm <- svm_rbf(mode = "classification", cost = 5.004239542, rbf_sigma = 0.03505893)
+svm <- svm_rbf(mode = "classification", cost = 10, rbf_sigma = 0.01)
 
 # Fit the SVM model on t he training data
 svm_fit <- 
@@ -267,22 +264,17 @@ plot_pca(pca, correctly_classified_test, alpha = 0.5, title = "Test set with mis
 pca_projection(x_bin_train, x_bin_test, SVM_recipe)
 
 # Plot density plots of the training and test before and after preprocessing
-plot_dens(data.frame(subset(test_norm, select = -y)))
-plot_dens(data.frame(subset(train_norm, select = -y)))
-plot_dens(data.frame(subset(x_bin_train, select = -y)))
-plot_dens(data.frame(subset(x_bin_test, select = -y)))
+#plot_dens(data.frame(subset(test_norm, select = -y)))
+#plot_dens(data.frame(subset(train_norm, select = -y)))
+#plot_dens(data.frame(subset(x_bin_train, select = -y)))
+#plot_dens(data.frame(subset(x_bin_test, select = -y)))
 ```
 ```{r gridsearch_lin}
 # Set cost values to evaluate
-cost_range = seq(1, 50, by = 4)
-cost_range = 10^(-2:1)
+cost_range = 10^(-3:1)
 
 # Perform gridsearch
-model_opt <- gridsearch_svm_lin(train_norm, SVM_recipe, cost_range)
-
-
-#model_opt = tune.svm(y ~ ., data = train_norm, type = "nu-classification", kernel = 'linear', cost = 10^(-1:2))
-#model_opt = tune.svm(y ~ ., data = train_norm, type = "C-classification", kernel = 'polynomial', cost = 10^(-1:2))
+lin_model_opt = tune.svm(y ~ ., data = train_norm, type = "nu-classification", kernel = 'linear', cost = cost_range)
 
 ```
 
@@ -292,11 +284,7 @@ model_opt <- gridsearch_svm_lin(train_norm, SVM_recipe, cost_range)
 set.seed(4685)
 
 # Create svm model
-svm_lin <- svm(y ~ ., train_norm, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 0.1, probability = T)
-
-pred <- predict(svm_lin, train_norm)
-
-table(pred, train_norm$y)
+svm_lin <- svm(y ~ ., train_norm, scale = FALSE, type = "nu-classification", kernel = 'linear',  cost = 0.00001, probability = T)
 
 # Evaluate the SVM model on the test data
 test_results_lin <- 
@@ -307,22 +295,6 @@ test_results_lin <-
 
 # Compute the confusion matrix and evaluate the SVM performance
 caret::confusionMatrix(factor(test_results_lin[['Predicted class']]), factor(test_results_lin[['True class']]))
-
-
-
-# Generate PCA plot with svm misclassification information
-pca <- prcomp(x_bin_test, center = TRUE, scale=FALSE)
-correctly_classified <- test_results_lin$'Predicted class' == test_results_lin$'True class'
-
-x_bin_test_norm <- bake(SVM_recipe, x_bin_test)
-
-f <- kernelMatrix(rbfkernel, as.matrix(x_bin_test_norm))
-
-pca <- prcomp(f, center = TRUE, scale=TRUE)
-
-plot_pca(pca, correctly_classified)
-
-
 ```
 
 ```{R roc}
@@ -343,7 +315,7 @@ test_results_lin <-
 # Create ROC curve for the linear and rbf svm models
 par(pty = 's')
 roc(as.numeric(test_results_rbf$'True class'), as.numeric(test_results_rbf$'Predicted class'), plot = T, legacy.axes = T,
-     percent = T, xlab = "False postive %", ylab = "True positive percentage", print.auc = T, print.auc.y = 95, col = "cadetblue3")
+     percent = T, xlab = "False postive %", ylab = "True positive %", print.auc = T, print.auc.y = 95, col = "cadetblue3")
 plot.roc(as.numeric(test_results_lin$'True class'), as.numeric(test_results_lin$'Predicted class'), percent = T,
           print.auc = T, add = T, smoothed = F, col = "coral3")
 legend(39, 20, legend=c("rbf", "linear"),
